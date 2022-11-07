@@ -5,6 +5,7 @@ TRANSIP_Token_Expiration="30 minutes"
 # You can't reuse a label token, so we leave this empty normally
 TRANSIP_Token_Label=""
 
+
 ########  Public functions #####################
 #Usage: add  _acme-challenge.www.domain.com   "XKrxpRBosdIKFzxW_CT3KLZNf6q0HG9i01zxXp5CPBs"
 dns_transip_add() {
@@ -130,10 +131,14 @@ _transip_setup() {
   # retrieve the transip creds
   TRANSIP_Username="${TRANSIP_Username:-$(_readaccountconf_mutable TRANSIP_Username)}"
   TRANSIP_Key_File="${TRANSIP_Key_File:-$(_readaccountconf_mutable TRANSIP_Key_File)}"
+  TRANSIP_Token="${TRANSIP_Token:-$(_readaccountconf_mutable TRANSIP_Token)}"
+  
+  
   # check their vals for null
-  if [ -z "$TRANSIP_Username" ] || [ -z "$TRANSIP_Key_File" ]; then
+  if [ -z "$TRANSIP_Username" ] || [ [ -z "$TRANSIP_Key_File" ] && [ -z "$TRANSIP_Token" ] ]; then
     TRANSIP_Username=""
     TRANSIP_Key_File=""
+	TRANSIP_Token=""
     _err "You didn't specify a TransIP username and api key file location"
     _err "Please set those values and try again."
     return 1
@@ -141,6 +146,15 @@ _transip_setup() {
   # save the username and api key to the account conf file.
   _saveaccountconf_mutable TRANSIP_Username "$TRANSIP_Username"
   _saveaccountconf_mutable TRANSIP_Key_File "$TRANSIP_Key_File"
+  _saveaccountconf_mutable TRANSIP_Token "$TRANSIP_Token"
+  
+  # save b64 token to temp file
+  if [ -n "$TRANSIP_Token" ]; then
+    _debug "download transip key file"
+    TRANSIP_Key_File="$(_mktemp)"
+    chmod 600 "$TRANSIP_Key_File"
+    echo "$TRANSIP_Token" | _dbase64 >"$TRANSIP_Key_File"
+  fi
 
   # download key file if it's an URL
   if _startswith "$TRANSIP_Key_File" "http"; then
@@ -175,6 +189,12 @@ _transip_setup() {
     _debug "delete transip key file"
     rm "${TRANSIP_Key_File}"
     TRANSIP_Key_File=$TRANSIP_Key_URL
+  fi
+  
+  # clean temp key file
+  if [ -n "${TRANSIP_Token}" ]; then
+    _debug "delete temp transip key file"
+    rm "${TRANSIP_Key_File}"
   fi
 
   _get_root "$fulldomain" || return 1
